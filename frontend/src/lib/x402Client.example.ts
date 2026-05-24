@@ -36,8 +36,8 @@
  *
  * SIMPLIFIED vs PRODUCTION:
  *   This file intentionally omits retry logic, multi-scheme selection,
- *   and telemetry to keep the core x402 flow visible. The production
- *   version in rosetta-alpha adds those layers on top.
+ *   and telemetry to keep the core x402 flow visible. A production
+ *   implementation would add those layers on top.
  */
 
 import { loadSessionKey, hasSessionBudget, recordSpend, generateNonce } from './sessionKey.example'

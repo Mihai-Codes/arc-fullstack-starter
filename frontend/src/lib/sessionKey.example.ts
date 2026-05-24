@@ -71,7 +71,7 @@ export type SessionKey = {
 
 // Storage key in sessionStorage.
 // Using a specific prefix avoids collisions with other app keys.
-const STORAGE_KEY = 'rosetta_session_key'
+const STORAGE_KEY = 'x402_session_key'
 
 // ─────────────────────────────────────────────────────────────────────────────
 // EIP-712 DOMAIN & TYPES FOR SESSION KEY AUTHORIZATION
@@ -79,11 +79,11 @@ const STORAGE_KEY = 'rosetta_session_key'
 //
 // EIP-712 signs structured data, not raw bytes.
 // The domain binds the signature to a specific app + chain,
-// preventing a session key authorized for Rosetta Alpha from
+// preventing a session key authorized for your app from
 // being replayed on a different app or a different chain.
 
 const SESSION_AUTH_DOMAIN: TypedDataDomain = {
-  name: 'Rosetta Alpha',   // your application's name
+  name: 'Your App Name',   // replace with your application's name
   version: '1',
   chainId: 5042002,        // Arc Testnet — hardcoded to prevent cross-chain replay
 }
@@ -146,7 +146,7 @@ export function generateSessionKey(): { privateKey: `0x${string}`; address: `0x$
  *   1. Phishing: The wallet shows the human-readable field names and
  *      values, not raw hex bytes. Users can see exactly what they sign.
  *   2. Cross-context replay: The domain (name, chainId) is included in
- *      the hash, so a signature for Rosetta Alpha cannot be used on
+ *      the hash, so a signature for your app cannot be used on
  *      a different app or chain.
  *
  * The produced typed data object is passed directly to wagmi's
