@@ -17,8 +17,8 @@
  */
 
 import { describe, test, expect } from 'vitest'
-import { buildTransferAuthorizationMessage } from '../frontend/src/lib/eip3009.example'
-import type { TransferAuthorization } from '../frontend/src/lib/eip3009.example'
+import { buildTransferAuthorizationMessage, encodePaymentHeader, decodePaymentHeader } from '../frontend/src/lib/eip3009.example'
+import type { TransferAuthorization, SignedAuthorization } from '../frontend/src/lib/eip3009.example'
 
 // ─── Fixtures ─────────────────────────────────────────────────────────────────
 
@@ -167,5 +167,43 @@ describe('EIP-712 message values', () => {
     const msg = buildTransferAuthorizationMessage(largeValueAuth, MOCK_USDC_ADDRESS)
     expect(msg.message.value).toBe(1_000_000_000_000n)
     expect(typeof msg.message.value).toBe('bigint')
+  })
+})
+
+// ─── Header Encoding/Decoding tests ───────────────────────────────────────────
+
+describe('Payment Header Encoding/Decoding', () => {
+  const mockSignedAuth: SignedAuthorization = {
+    ...MOCK_AUTH,
+    v: 27,
+    r: '0x1111111111111111111111111111111111111111111111111111111111111111',
+    s: '0x2222222222222222222222222222222222222222222222222222222222222222',
+    signature: '0x111111111111111111111111111111111111111111111111111111111111111122222222222222222222222222222222222222222222222222222222222222221b',
+  }
+
+  test('encodePaymentHeader produces a base64 string', () => {
+    const encoded = encodePaymentHeader(mockSignedAuth)
+    expect(typeof encoded).toBe('string')
+    // Check if valid base64 (roughly)
+    expect(encoded).toMatch(/^[A-Za-z0-9+/=]+$/)
+  })
+
+  test('decodePaymentHeader reconstructs the SignedAuthorization', () => {
+    const encoded = encodePaymentHeader(mockSignedAuth)
+    const decoded = decodePaymentHeader(encoded)
+
+    // BigInts must be correctly restored
+    expect(decoded.value).toBe(mockSignedAuth.value)
+    expect(decoded.validAfter).toBe(mockSignedAuth.validAfter)
+    expect(decoded.validBefore).toBe(mockSignedAuth.validBefore)
+    
+    // Addresses and strings
+    expect(decoded.from).toBe(mockSignedAuth.from)
+    expect(decoded.to).toBe(mockSignedAuth.to)
+    expect(decoded.nonce).toBe(mockSignedAuth.nonce)
+    expect(decoded.signature).toBe(mockSignedAuth.signature)
+    expect(decoded.v).toBe(mockSignedAuth.v)
+    expect(decoded.r).toBe(mockSignedAuth.r)
+    expect(decoded.s).toBe(mockSignedAuth.s)
   })
 })
