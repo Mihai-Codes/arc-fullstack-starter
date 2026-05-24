@@ -310,7 +310,20 @@ export function hasSessionBudget(amountUsdc: number): boolean {
  * was accepted (HTTP 2xx). Recording spend before confirmation could
  * result in the budget being depleted even if the payment failed.
  *
- * @param amountUsdc  The amount that was successfully paid
+ * KNOWN LIMITATION (floating-point arithmetic):
+ * We store spentUsdc as a JS `number` (IEEE 754 double-precision float).
+ * For most micropayment use cases (6 decimal USDC values) this is fine,
+ * but floating-point addition is not exact:
+ *   0.1 + 0.2 === 0.30000000000000004  // NOT 0.3
+ *
+ * For a production-grade implementation, track budget in BigInt atomic
+ * units (integers, no precision loss) and only convert to `number` for display:
+ *   spentAtomic += BigInt(amountAtomic)   // ✅ exact
+ *   display = Number(spentAtomic) / 1_000_000  // only for UI
+ *
+ * This simplified version uses `number` to keep the code readable for learning.
+ *
+ * @param amountUsdc  The amount that was successfully paid (human-readable USDC)
  */
 export function recordSpend(amountUsdc: number): void {
   const key = loadSessionKey()
