@@ -7,13 +7,31 @@
     "doc": "docs"
   },
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage"
   },
   "repository": {
     "type": "git",
     "url": "git+https://github.com/Mihai-Codes/arc-fullstack-starter.git"
   },
-  "keywords": ["arc", "arc-network", "arc-testnet", "x402", "eip-3009", "session-keys", "micropayments", "usdc", "web3", "stablecoin", "ethereum", "viem", "typescript", "fullstack-starter", "transferWithAuthorization"],
+  "keywords": [
+    "arc",
+    "arc-network",
+    "arc-testnet",
+    "x402",
+    "eip-3009",
+    "session-keys",
+    "micropayments",
+    "usdc",
+    "web3",
+    "stablecoin",
+    "ethereum",
+    "viem",
+    "typescript",
+    "fullstack-starter",
+    "transferWithAuthorization"
+  ],
   "author": "",
   "license": "ISC",
   "type": "commonjs",
@@ -26,5 +44,10 @@
     "ts-node": "^10.9.2",
     "typescript": "^6.0.3",
     "viem": "^2.50.4"
+  },
+  "devDependencies": {
+    "@vitest/coverage-v8": "^4.1.7",
+    "jsdom": "^29.1.1",
+    "vitest": "^4.1.7"
   }
 }
