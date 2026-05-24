@@ -17,12 +17,15 @@
 import { describe, test, expect, beforeEach, vi } from 'vitest'
 import {
   generateSessionKey,
+  buildSessionAuthMessage,
   saveSessionKey,
   loadSessionKey,
   revokeSessionKey,
   hasSessionBudget,
+  recordSpend,
+  generateNonce,
 } from '../frontend/src/lib/sessionKey.example'
-import type { SessionKey } from '../frontend/src/lib/sessionKey.example'
+import type { SessionKey, SessionKeyConfig } from '../frontend/src/lib/sessionKey.example'
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -209,5 +212,133 @@ describe('revokeSessionKey', () => {
   test('is idempotent (safe to call when no key exists)', () => {
     expect(() => revokeSessionKey()).not.toThrow()
     expect(() => revokeSessionKey()).not.toThrow()
+  })
+})
+
+// ─── recordSpend ──────────────────────────────────────────────────────────────
+
+describe('recordSpend', () => {
+  test('increments spentUsdc by the given amount', () => {
+    saveSessionKey(makeSessionKey({ spentUsdc: 1.0 }))
+    recordSpend(0.5)
+    expect(loadSessionKey()?.spentUsdc).toBeCloseTo(1.5)
+  })
+
+  test('multiple spends accumulate correctly', () => {
+    saveSessionKey(makeSessionKey({ spentUsdc: 0 }))
+    recordSpend(0.1)
+    recordSpend(0.2)
+    recordSpend(0.3)
+    expect(loadSessionKey()?.spentUsdc).toBeCloseTo(0.6)
+  })
+
+  test('is a no-op when no session key exists', () => {
+    expect(() => recordSpend(1.0)).not.toThrow()
+    expect(loadSessionKey()).toBeNull()
+  })
+
+  test('persists spend to sessionStorage (survives re-read)', () => {
+    saveSessionKey(makeSessionKey({ spentUsdc: 0 }))
+    recordSpend(2.5)
+    // Re-load from storage to confirm persistence
+    const reloaded = loadSessionKey()
+    expect(reloaded?.spentUsdc).toBeCloseTo(2.5)
+  })
+
+  test('does not record spend on expired key', () => {
+    const key = makeSessionKey({
+      spentUsdc: 0,
+      config: { maxAmountUsdc: 5, expirySeconds: 1, allowedContracts: [], nonce: '0x' },
+      createdAt: Date.now() - 2000,
+    })
+    saveSessionKey(key)
+    recordSpend(1.0)
+    // loadSessionKey returns null for expired key, so nothing was recorded
+    expect(loadSessionKey()).toBeNull()
+  })
+})
+
+// ─── generateNonce ────────────────────────────────────────────────────────────
+
+describe('generateNonce', () => {
+  test('returns a 0x-prefixed 32-byte hex string', () => {
+    const nonce = generateNonce()
+    expect(nonce).toMatch(/^0x[0-9a-f]{64}$/)
+  })
+
+  test('generates unique nonces (no collisions)', () => {
+    const nonces = new Set(Array.from({ length: 20 }, () => generateNonce()))
+    expect(nonces.size).toBe(20)
+  })
+
+  test('uses CSPRNG — not Math.random', () => {
+    const spy = vi.spyOn(Math, 'random')
+    generateNonce()
+    expect(spy).not.toHaveBeenCalled()
+    spy.mockRestore()
+  })
+
+  test('is exactly 66 characters (0x + 64 hex = 32 bytes)', () => {
+    const nonce = generateNonce()
+    expect(nonce).toHaveLength(66)
+  })
+})
+
+// ─── buildSessionAuthMessage ──────────────────────────────────────────────────
+
+describe('buildSessionAuthMessage', () => {
+  const config: SessionKeyConfig = {
+    maxAmountUsdc: 5,
+    expirySeconds: 86400,
+    allowedContracts: ['0x1234567890123456789012345678901234567890'],
+    nonce: '0xdeadbeef',
+  }
+  const userAddress = '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
+  const sessionAddress = '0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb'
+
+  test('domain chainId is Arc Testnet (5042002)', () => {
+    const msg = buildSessionAuthMessage(userAddress, sessionAddress, config)
+    expect(msg.domain.chainId).toBe(5042002)
+  })
+
+  test('primaryType is SessionKeyAuthorization', () => {
+    const msg = buildSessionAuthMessage(userAddress, sessionAddress, config)
+    expect(msg.primaryType).toBe('SessionKeyAuthorization')
+  })
+
+  test('message sessionAddress matches passed address', () => {
+    const msg = buildSessionAuthMessage(userAddress, sessionAddress, config)
+    expect(msg.message.sessionAddress).toBe(sessionAddress)
+  })
+
+  test('maxAmountUsdc is encoded as atomic string (×1e6)', () => {
+    const msg = buildSessionAuthMessage(userAddress, sessionAddress, config)
+    // 5 USDC → "5000000" (6 decimal places, as string)
+    expect(msg.message.maxAmountUsdc).toBe('5000000')
+  })
+
+  test('expiryTimestamp is a bigint in the future', () => {
+    const now = BigInt(Math.floor(Date.now() / 1000))
+    const msg = buildSessionAuthMessage(userAddress, sessionAddress, config)
+    expect(typeof msg.message.expiryTimestamp).toBe('bigint')
+    expect(msg.message.expiryTimestamp).toBeGreaterThan(now)
+  })
+
+  test('nonce is passed through from config', () => {
+    const msg = buildSessionAuthMessage(userAddress, sessionAddress, config)
+    expect(msg.message.nonce).toBe(config.nonce)
+  })
+
+  test('allowedContracts are packed into a hex bytes field', () => {
+    const msg = buildSessionAuthMessage(userAddress, sessionAddress, config)
+    // Should be 0x-prefixed hex containing the stripped address
+    expect(msg.message.allowedContracts).toMatch(/^0x[0-9a-f]+$/)
+    expect(msg.message.allowedContracts).toContain('1234567890123456789012345678901234567890')
+  })
+
+  test('empty allowedContracts produces 0x (empty bytes)', () => {
+    const emptyConfig = { ...config, allowedContracts: [] }
+    const msg = buildSessionAuthMessage(userAddress, sessionAddress, emptyConfig)
+    expect(msg.message.allowedContracts).toBe('0x')
   })
 })
