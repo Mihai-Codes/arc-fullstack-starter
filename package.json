@@ -13,7 +13,7 @@
     "type": "git",
     "url": "git+https://github.com/Mihai-Codes/arc-fullstack-starter.git"
   },
-  "keywords": [],
+  "keywords": ["arc", "arc-network", "arc-testnet", "x402", "eip-3009", "session-keys", "micropayments", "usdc", "web3", "stablecoin", "ethereum", "viem", "typescript", "fullstack-starter", "transferWithAuthorization"],
   "author": "",
   "license": "ISC",
   "type": "commonjs",
