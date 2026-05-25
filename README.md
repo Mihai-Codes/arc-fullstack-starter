@@ -1,7 +1,7 @@
 # 🥚 Arc Fullstack Starter: x402 + EIP-3009 Session Keys
 
 [![CI](https://github.com/Mihai-Codes/arc-fullstack-starter/actions/workflows/ci.yml/badge.svg)](https://github.com/Mihai-Codes/arc-fullstack-starter/actions/workflows/ci.yml)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![License: ISC](https://img.shields.io/badge/License-ISC-blue.svg)](LICENSE)
 ![TypeScript](https://img.shields.io/badge/TypeScript-5.x-3178C6?logo=typescript&logoColor=white)
 ![Arc Testnet](https://img.shields.io/badge/Arc-Testnet%205042002-6C47FF)
 ![Protocol: x402](https://img.shields.io/badge/Protocol-x402-ff6b35)

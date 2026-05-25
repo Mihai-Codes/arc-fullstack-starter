@@ -1,7 +1,7 @@
 {
   "name": "arc-fullstack-starter",
   "version": "1.0.0",
-  "description": "",
+  "description": "Pedagogical starter kit for x402 HTTP payments and EIP-3009 session keys on Arc L1",
   "main": "index.js",
   "directories": {
     "doc": "docs"
