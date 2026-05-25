@@ -345,7 +345,7 @@ function generateNonce(): `0x${string}` {
 
 **Immediate client-side (stops all future signing):**
 ```typescript
-sessionStorage.removeItem('rosetta_session_key')
+sessionStorage.removeItem('your_app_session_key')
 ```
 
 **On-chain fund recovery:**
