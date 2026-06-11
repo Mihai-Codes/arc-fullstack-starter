@@ -19,10 +19,23 @@ jobs:
       - run: npm ci
       - run: npx tsc --noEmit
 
+  test:
+    name: Run Tests
+    runs-on: ubuntu-latest
+    needs: typecheck
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      - run: npm ci
+      - run: npx vitest run
+
   demo:
     name: Run Demo Script
     runs-on: ubuntu-latest
-    needs: typecheck
+    needs: test
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
