@@ -367,7 +367,108 @@ Sign another `transferWithAuthorization` from the session key, sending its remai
 
 ---
 
-## 7. Quick Reference
+## 7. Server-Side: The withX402() Middleware
+
+The client (section 4) handles the "pay" half. The server handles the "verify + settle" half.
+
+### The Server-Side Flow
+
+```
+Request arrives at API route
+         │
+         ▼
+┌──────────────────┐
+│ withX402()       │
+│ middleware        │
+├──────────────────┤
+│ 1. Check header  │── No header? → 402 + payment requirements
+│ 2. Decode header │── Malformed? → 402 + INVALID_PAYMENT_HEADER
+│ 3. Verify sig    │── Invalid?   → 402 + PAYMENT_VERIFICATION_FAILED
+│ 4. Settle on-chain│── Failed?   → 402 + SETTLEMENT_FAILED
+│ 5. Call handler  │
+└──────────────────┘
+         │
+         ▼
+   Your route handler
+   (never sees unpaid requests)
+```
+
+### Usage: Protect Any Route
+
+```typescript
+// app/api/premium/route.ts
+import { withX402 } from '@/lib/x402Server.example'
+
+export const GET = withX402({
+  resource: '/api/premium',
+  priceUsdc: 0.001,        // $0.001 per request
+  description: 'Premium data access',
+  treasuryAddress: '0xYOUR_TREASURY',
+  rpcUrl: process.env.ARC_RPC_URL!,
+  usdcAddress: '0xUSDC_ADDRESS',
+  settlerPrivateKey: '0xSETTLER_KEY',
+}, async (req) => {
+  // This handler only runs AFTER payment succeeds.
+  // No payment checking needed here.
+  return Response.json({ data: 'premium content' })
+})
+```
+
+### What the 402 Response Looks Like
+
+```json
+{
+  "x402Version": 2,
+  "resource": {
+    "url": "/api/premium",
+    "description": "Premium data access",
+    "mimeType": "application/json"
+  },
+  "accepts": [
+    {
+      "scheme": "exact",
+      "network": "eip155:5042002",
+      "amount": "1000",
+      "asset": "0x3600000000000000000000000000000000000000",
+      "payTo": "0xYOUR_TREASURY",
+      "maxTimeoutSeconds": 300,
+      "extra": {
+        "name": "USD Coin",
+        "version": "2"
+      }
+    }
+  ]
+}
+```
+
+### Verification: The Four Checks
+
+The middleware verifies the payment before settling:
+
+| Check | What | Why |
+|-------|------|-----|
+| **(a) Not expired** | `validBefore > now` | Expired authorizations are rejected on-chain anyway |
+| **(b) Sufficient amount** | `value >= priceUsdc × 1e6` | Client might try to pay less than required |
+| **(c) Correct recipient** | `to === treasuryAddress` | Client might pay a different address |
+| **(d) Valid signature** | `ecrecover(sig) === from` | Proves the session key controls the `from` address |
+
+### Replay Protection
+
+When `settleOnChain: false` (demo mode), the USDC contract doesn't track the nonce. The middleware maintains an in-memory `Map<nonce, expiry>` to prevent replay.
+
+**Trade-off:** In-memory Maps reset on serverless cold starts. For production, persist used nonces to a database (PostgreSQL, Redis, etc.).
+
+### Server-Side Settler Security
+
+1. **Verify the EIP-712 signature** before submitting — don't blindly relay.
+2. **Check `validBefore > block.timestamp`** server-side before paying gas.
+3. **Idempotency:** Log used nonces server-side to reject duplicates before they hit the chain.
+4. **Rate limiting:** Per-IP and per-session-key rate limits to prevent DoS that drains settler gas.
+5. **Separation:** The settler key signs transactions but doesn't hold treasury funds.
+
+---
+
+## 8. Quick Reference
 
 ### Arc Network Constants
 
@@ -402,6 +503,8 @@ const toAtomic = (usdc: number) => BigInt(Math.round(usdc * 1_000_000))
 | `docs/X402_SESSION_KEYS.md` | This guide |
 | `frontend/src/lib/sessionKey.example.ts` | Session key generation, storage, lifecycle |
 | `frontend/src/lib/eip3009.example.ts` | EIP-3009 signing, header encoding/decoding |
-| `frontend/src/lib/x402Client.example.ts` | x402-aware fetch wrapper |
+| `frontend/src/lib/x402Client.example.ts` | x402-aware fetch wrapper (client side) |
+| `frontend/src/lib/x402Server.example.ts` | x402 payment middleware (server side) |
+| `frontend/src/app/api/x402/agent-insight/route.ts` | Example protected endpoint |
 | `scripts/x402_demo.ts` | Minimal runnable demo: 402 → sign → retry → success |
 | `scripts/x402_full_demo.ts` | Extended demo with full session key lifecycle |
