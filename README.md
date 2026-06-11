@@ -47,9 +47,11 @@ This repository is optimized for learning. Code density is reduced by 40% compar
 - **[scripts/x402_full_demo.ts](./scripts/x402_full_demo.ts)**: A standalone Node.js script that simulates the entire user approval, 402 rejection, session key signing, and successful server settlement flow.
 
 ### 5. Tests (92 passing)
-- **[tests/x402Server.test.ts](./tests/x402Server.test.ts)**: 18 tests — input validation, accepted field checks, replay detection, TOCTOU race condition, settlement response schema.
-- **[tests/x402Client.test.ts](./tests/x402Client.test.ts)**: 23 tests — passthrough, error taxonomy, network validation, full challenge-response loop.
+- **[tests/session-key.test.ts](./tests/session-key.test.ts)**: 36 tests — session key generation, EIP-712 auth messages, budget enforcement, expiry, sessionStorage lifecycle.
 - **[tests/eip3009.test.ts](./tests/eip3009.test.ts)**: 20 tests — EIP-712 domain, nonce validation, signature verification, decodeFullPaymentPayload, encodePaymentHeader.
+- **[tests/x402Server.test.ts](./tests/x402Server.test.ts)**: 18 tests — input validation, accepted field checks, replay detection, TOCTOU race condition, settlement response schema.
+- **[tests/x402Client.test.ts](./tests/x402Client.test.ts)**: 7 tests — passthrough, error taxonomy, network validation, full challenge-response loop.
+- **[tests/chain-config.test.ts](./tests/chain-config.test.ts)**: 6 tests — chain ID validation, USDC address constants, network configuration.
 - **[tests/x402Handshake.test.ts](./tests/x402Handshake.test.ts)**: 5 end-to-end tests — full crypto flow with real keys (no mocks for signing), accepted field validation, replay detection.
 
 ---
@@ -99,7 +101,7 @@ All 5 documented attacks from arXiv `2605.11781` are mitigated:
 | Attack | Mitigation | Code Location |
 |---|---|---|
 | **Frontrunning (TOCTOU)** | Nonce marked used BEFORE handler executes | `x402Server.example.ts:432-442` |
-| **Cache poisoning** | `validAfter` check rejects future-dated auths | `x402Server.example.ts:576-585` |
-| **Signature malleability** | EIP-712 typed data signatures are non-malleable by design | `eip3009.example.ts` (recoverTypedDataAddress) |
-| **Amount manipulation** | Server validates `accepted.amount` matches config | `x402Server.example.ts:488-493` |
-| **Expiry bypass** | `validBefore` check rejects expired auths | `x402Server.example.ts:588-591` |
+| **Cache poisoning** | `validAfter` check rejects future-dated auths | `x402Server.example.ts:582` |
+| **Signature malleability** | EIP-712 typed data signatures are non-malleable by design | `x402Server.example.ts:635` (recoverTypedDataAddress) |
+| **Amount manipulation** | Server validates `accepted.amount` matches config | `x402Server.example.ts:342` |
+| **Expiry bypass** | `validBefore` check rejects expired auths | `x402Server.example.ts:588` |
