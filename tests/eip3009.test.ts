@@ -30,7 +30,7 @@ const MOCK_AUTH: TransferAuthorization = {
   value: 500000n,                                    // 0.5 USDC (6 decimals)
   validAfter: 0n,
   validBefore: BigInt(Math.floor(Date.now() / 1000) + 300), // 5 min window
-  nonce: '0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890ab' as `0x${string}`,
+  nonce: '0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890' as `0x${string}`,
 }
 
 // ─── Domain tests ─────────────────────────────────────────────────────────────

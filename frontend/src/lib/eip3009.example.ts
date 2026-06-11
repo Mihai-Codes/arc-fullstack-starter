@@ -30,15 +30,19 @@
 
 import { privateKeyToAccount } from 'viem/accounts'
 import type { SessionKey } from './sessionKey.example'
+import {
+  ARC_TESTNET_CAIP2,
+  SIGNATURE_HEX_LENGTH,
+  NONCE_HEX_LENGTH,
+  type PaymentRequirements,
+  type ResourceInfo,
+  type PaymentPayload,
+} from './x402Types'
 
-// ─── TYPES & CONFIGS ────────────────────────────────────────────────────────
-
-/**
- * CAIP-2 network identifier for Arc Testnet.
- * Used in x402 PaymentPayload.network and PaymentRequired.accepts.network.
- * Ref: https://github.com/ChainAgnostic/namespaces/blob/main/CAIPs/caip-2.md
- */
-export const ARC_TESTNET_CAIP2 = 'eip155:5042002' as const
+// Re-export the shared constant and types for backwards compatibility.
+// New code should import from './x402Types' directly.
+export { ARC_TESTNET_CAIP2 } from './x402Types'
+export type { PaymentRequirements, ResourceInfo } from './x402Types'
 
 export type TransferAuthorization = {
   from: `0x${string}`         // user's session key address
@@ -157,17 +161,9 @@ export async function signTransferAuthorization(
 export function encodePaymentHeader(
   signed: SignedAuthorization,
   /** The server's PaymentRequirements from the 402 response (echoed back) */
-  accepted?: {
-    scheme: string
-    network: string
-    amount: string
-    asset: string
-    payTo: string
-    maxTimeoutSeconds: number
-    extra?: Record<string, unknown>
-  },
+  accepted?: PaymentRequirements,
   /** The resource being paid for (optional, from the 402 response) */
-  resource?: { url: string; description?: string; mimeType?: string }
+  resource?: ResourceInfo
 ): string {
   const paymentPayload = {
     x402Version: 2,
@@ -247,6 +243,22 @@ export function decodePaymentHeader(header: string): SignedAuthorization {
   if (!addrRegex.test(auth.from)) throw new Error(`Invalid from address: ${auth.from}`)
   if (!addrRegex.test(auth.to)) throw new Error(`Invalid to address: ${auth.to}`)
 
+  // Validate nonce format: must be 0x + 64 hex chars (bytes32)
+  const nonceRegex = /^0x[0-9a-fA-F]{64}$/
+  if (!nonceRegex.test(auth.nonce)) {
+    throw new Error(
+      `Invalid nonce: ${auth.nonce} (expected 0x + 64 hex chars, got ${auth.nonce.length} chars)`
+    )
+  }
+
+  // Validate signature format: must be 0x + 130 hex chars (65 bytes = r + s + v)
+  const sigRegex = /^0x[0-9a-fA-F]{130}$/
+  if (!sigRegex.test(payload.signature)) {
+    throw new Error(
+      `Invalid signature: expected 0x + 130 hex chars (65 bytes), got ${payload.signature.length} chars`
+    )
+  }
+
   // Validate bigint fields are non-negative numbers
   const value = BigInt(auth.value)
   const validAfter = BigInt(auth.validAfter)
@@ -281,4 +293,35 @@ export function decodePaymentHeader(header: string): SignedAuthorization {
     s,
     signature: sig as `0x${string}`,
   }
+}
+
+/**
+ * Decode a PAYMENT-SIGNATURE header into the full PaymentPayload.
+ *
+ * Unlike `decodePaymentHeader` which extracts only the authorization,
+ * this returns the complete PaymentPayload including `accepted`, `resource`,
+ * and `extensions` — used by the server to validate the client's chosen
+ * payment terms match what the server requires.
+ *
+ * @throws If the header is malformed or missing required fields
+ */
+export function decodeFullPaymentPayload(header: string): PaymentPayload {
+  let jsonString: string
+
+  if (typeof window !== 'undefined') {
+    jsonString = atob(header)
+  } else {
+    jsonString = Buffer.from(header, 'base64').toString('utf-8')
+  }
+
+  const parsed = JSON.parse(jsonString)
+
+  if (!parsed.payload) {
+    throw new Error('Payment header missing payload')
+  }
+  if (!parsed.accepted) {
+    throw new Error('Payment header missing accepted field (x402 v2 spec requires it)')
+  }
+
+  return parsed as PaymentPayload
 }

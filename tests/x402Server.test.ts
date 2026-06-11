@@ -43,6 +43,28 @@ vi.mock('viem/accounts', () => ({
 
 vi.mock('../frontend/src/lib/eip3009.example', () => ({
   decodePaymentHeader: vi.fn(),
+  decodeFullPaymentPayload: vi.fn(() => ({
+    x402Version: 2,
+    accepted: {
+      scheme: 'exact',
+      network: 'eip155:5042002',
+      amount: '1000',
+      asset: '0xusdc',
+      payTo: '0xtreasury',
+      maxTimeoutSeconds: 300,
+    },
+    payload: {
+      signature: '0xsignature',
+      authorization: {
+        from: '0xuser',
+        to: '0xtreasury',
+        value: '1000',
+        validAfter: '0',
+        validBefore: String(Math.floor(Date.now() / 1000) + 300),
+        nonce: '0xnonce123',
+      },
+    },
+  })),
   buildTransferAuthorizationMessage: vi.fn(() => ({
     domain: { name: 'USD Coin', version: '2', chainId: 5042002, verifyingContract: '0xusdc' },
     types: { TransferWithAuthorization: [] },

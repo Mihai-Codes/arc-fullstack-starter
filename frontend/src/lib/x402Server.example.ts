@@ -64,10 +64,18 @@ import {
 import { privateKeyToAccount } from 'viem/accounts'
 import {
   decodePaymentHeader,
+  decodeFullPaymentPayload,
   buildTransferAuthorizationMessage,
-  ARC_TESTNET_CAIP2,
   type SignedAuthorization,
 } from './eip3009.example'
+import {
+  ARC_TESTNET_CAIP2,
+  X402_VERSION,
+  type PaymentPayload,
+  type PaymentRequired,
+  type PaymentRequirements,
+  type SettlementResponse,
+} from './x402Types'
 
 // ─────────────────────────────────────────────────────────────────────────────
 // ARC TESTNET CHAIN DEFINITION
@@ -301,7 +309,9 @@ export function withX402(
     // The header is base64-encoded JSON containing the signed authorization.
     // If decoding fails, the header is malformed — reject immediately.
     let signedAuth: SignedAuthorization
+    let decodedPayload: PaymentPayload
     try {
+      decodedPayload = decodeFullPaymentPayload(paymentHeader)
       signedAuth = decodePaymentHeader(paymentHeader)
     } catch {
       // x402 v2 spec: malformed payment → HTTP 400 (Invalid Payment)
@@ -316,6 +326,46 @@ export function withX402(
           status: 400,
           headers: { 'Content-Type': 'application/json' },
         }
+      )
+    }
+
+    // ── Step 3b: Validate `accepted` field matches server requirements ───
+    //
+    // x402 v2 spec: the client must echo back the server's PaymentRequirements
+    // in the `accepted` field. We validate that the client's chosen payment
+    // terms match what this server requires. This prevents:
+    //   - Client paying a different amount than required
+    //   - Client paying on a different network
+    //   - Client paying to a different recipient
+    const accepted = decodedPayload.accepted
+    if (accepted.amount !== String(Math.round(config.priceUsdc * 1e6))) {
+      return new Response(
+        JSON.stringify({
+          error: 'Payment amount mismatch',
+          detail: `Client accepted ${accepted.amount} but server requires ${Math.round(config.priceUsdc * 1e6)}`,
+          code: 'INVALID_PAYLOAD',
+        }),
+        { status: 400, headers: { 'Content-Type': 'application/json' } }
+      )
+    }
+    if (accepted.network !== ARC_TESTNET_CAIP2) {
+      return new Response(
+        JSON.stringify({
+          error: 'Payment network mismatch',
+          detail: `Client accepted ${accepted.network} but server requires ${ARC_TESTNET_CAIP2}`,
+          code: 'INVALID_PAYLOAD',
+        }),
+        { status: 400, headers: { 'Content-Type': 'application/json' } }
+      )
+    }
+    if (accepted.payTo?.toLowerCase() !== config.treasuryAddress.toLowerCase()) {
+      return new Response(
+        JSON.stringify({
+          error: 'Payment recipient mismatch',
+          detail: `Client accepted payTo ${accepted.payTo} but server requires ${config.treasuryAddress}`,
+          code: 'INVALID_PAYLOAD',
+        }),
+        { status: 400, headers: { 'Content-Type': 'application/json' } }
       )
     }
 
@@ -417,7 +467,7 @@ export function withX402(
     //   { success, transaction, network, payer }
     // This is the canonical machine-readable settlement confirmation.
     const headers = new Headers(response.headers)
-    const paymentResponse = {
+    const paymentResponse: SettlementResponse = {
       success: true,
       transaction: txHash,
       network: ARC_TESTNET_CAIP2,
@@ -454,8 +504,8 @@ export function withX402(
  *   - x402 v2 clients read the header; older clients read the body
  */
 function buildPaymentRequiredResponse(config: X402ServerConfig): Response {
-  const body = {
-    x402Version: 2,
+  const body: PaymentRequired = {
+    x402Version: X402_VERSION,
     resource: {
       url: config.resource,
       description: config.description,
