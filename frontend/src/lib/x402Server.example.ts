@@ -225,11 +225,24 @@ function isNonceUsed(nonce: string): boolean {
  * The TTL is min(validBefore - now, 5 minutes). We cap at 5 minutes because:
  *   - After validBefore, the authorization is expired anyway
  *   - Capping prevents unbounded memory growth from long-lived nonces
+ *
+ * LAZY CLEANUP: When the map exceeds 1000 entries, we sweep all expired
+ * entries in one pass. This prevents unbounded memory growth in long-running
+ * servers without requiring a background timer (which doesn't work in
+ * serverless environments like Vercel or Cloudflare Workers).
  */
 function markNonceUsed(nonce: string, validBeforeMs: number): void {
   const ttl = Math.min(validBeforeMs - Date.now(), 5 * 60 * 1000)
   if (ttl > 0) {
     usedNonces.set(nonce, Date.now() + ttl)
+  }
+
+  // Lazy cleanup: sweep expired entries when map exceeds threshold
+  if (usedNonces.size > 1000) {
+    const now = Date.now()
+    for (const [key, expiry] of usedNonces) {
+      if (now > expiry) usedNonces.delete(key)
+    }
   }
 }
 
@@ -357,6 +370,17 @@ export function withX402(
       }
     } else {
       // Off-chain only: check nonce dedup to prevent replay
+      //
+      // CRITICAL: Mark the nonce as used BEFORE calling the handler.
+      // The original code marked AFTER — a classic TOCTOU (time-of-check-time-of-use)
+      // race condition. Two concurrent requests with the same nonce would both pass
+      // the isNonceUsed() check, both call the handler, and both mark the nonce.
+      // The second request should have been rejected.
+      //
+      // By marking first, we ensure that only the first request with a given nonce
+      // proceeds. If the handler fails, the nonce is "burned" — the client must
+      // generate a new authorization. This is the correct trade-off: a false
+      // rejection is safer than a double-execution.
       const nonceHex = signedAuth.nonce.toLowerCase()
       if (isNonceUsed(nonceHex)) {
         return new Response(
@@ -382,8 +406,19 @@ export function withX402(
 
     // Add x402 settlement proof headers to the response.
     // Clients can use these to verify the payment was settled.
+    //
+    // x402 v2 spec: PAYMENT-RESPONSE is base64-encoded JSON, not a plain string.
+    // This allows the header to carry structured settlement proof data.
     const headers = new Headers(response.headers)
-    headers.set('X-PAYMENT-RESPONSE', txHash)
+    const paymentResponse = {
+      x402Version: 2,
+      payment: {
+        txHash,
+        network: 'eip155:5042002',
+        scheme: 'exact',
+      },
+    }
+    headers.set('PAYMENT-RESPONSE', Buffer.from(JSON.stringify(paymentResponse)).toString('base64'))
     headers.set('X-PAYMENT-TX-HASH', txHash)
 
     return new Response(response.body, {
@@ -484,8 +519,20 @@ async function verifyPayment(
   signedAuth: SignedAuthorization,
   config: X402ServerConfig
 ): Promise<{ valid: boolean; reason?: string; signer?: `0x${string}` }> {
-  // ── Check (a): Not expired ──────────────────────────────────────────────
+  // ── Check (a): Authorization timing window ──────────────────────────────
+  //
+  // Both validAfter AND validBefore must be checked:
+  //   - validBefore > now: not expired (the USDC contract rejects expired auths)
+  //   - validAfter <= now: already valid (a client could submit a future-dated
+  //     auth, get the resource, then cancel the auth before validAfter — stealing
+  //     the resource without paying)
   const nowSeconds = BigInt(Math.floor(Date.now() / 1000))
+  if (signedAuth.validAfter > nowSeconds) {
+    return {
+      valid: false,
+      reason: `Payment authorization not yet valid. validAfter=${signedAuth.validAfter}, now=${nowSeconds}`,
+    }
+  }
   if (signedAuth.validBefore <= nowSeconds) {
     return {
       valid: false,

@@ -142,9 +142,12 @@ export async function signTransferAuthorization(
  */
 export function encodePaymentHeader(signed: SignedAuthorization): string {
   const paymentPayload = {
-    x402Version: 1,
+    x402Version: 2,
     scheme: 'exact',
-    network: 'arc-testnet-5042002',
+    // CAIP-2 network identifier for Arc Testnet
+    // Must match the server's 402 response (x402Server.example.ts line ~440)
+    // Ref: https://github.com/ChainAgnostic/namespaces/blob/main/CAIPs/caip-2.md
+    network: 'eip155:5042002',
     payload: {
       signature: signed.signature,
       from: signed.from,
@@ -183,12 +186,37 @@ export function decodePaymentHeader(header: string): SignedAuthorization {
   const parsed = JSON.parse(jsonString)
   const payload = parsed.payload
 
+  if (!payload) {
+    throw new Error('Payment header missing payload')
+  }
+
+  // Validate required fields exist and have correct types
+  const requiredFields = ['from', 'to', 'value', 'validAfter', 'validBefore', 'nonce', 'v', 'r', 's', 'signature'] as const
+  for (const field of requiredFields) {
+    if (payload[field] === undefined || payload[field] === null) {
+      throw new Error(`Payment header missing required field: ${field}`)
+    }
+  }
+
+  // Validate address formats (must be 0x + 40 hex chars)
+  const addrRegex = /^0x[0-9a-fA-F]{40}$/
+  if (!addrRegex.test(payload.from)) throw new Error(`Invalid from address: ${payload.from}`)
+  if (!addrRegex.test(payload.to)) throw new Error(`Invalid to address: ${payload.to}`)
+
+  // Validate bigint fields are non-negative numbers
+  const value = BigInt(payload.value)
+  const validAfter = BigInt(payload.validAfter)
+  const validBefore = BigInt(payload.validBefore)
+  if (value < 0n) throw new Error(`Invalid value: ${payload.value} (must be non-negative)`)
+  if (validAfter < 0n) throw new Error(`Invalid validAfter: ${payload.validAfter} (must be non-negative)`)
+  if (validBefore < 0n) throw new Error(`Invalid validBefore: ${payload.validBefore} (must be non-negative)`)
+
   return {
     from: payload.from as `0x${string}`,
     to: payload.to as `0x${string}`,
-    value: BigInt(payload.value),
-    validAfter: BigInt(payload.validAfter),
-    validBefore: BigInt(payload.validBefore),
+    value,
+    validAfter,
+    validBefore,
     nonce: payload.nonce as `0x${string}`,
     v: payload.v,
     r: payload.r as `0x${string}`,

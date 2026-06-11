@@ -287,8 +287,16 @@ describe('withX402', () => {
     const wrapped = withX402(TEST_CONFIG, handler)
     const response = await wrapped(makeRequest({ 'PAYMENT-SIGNATURE': 'base64' }))
 
-    // settleOnChain=false → 'verified-offchain'
-    expect(response.headers.get('X-PAYMENT-RESPONSE')).toBe('verified-offchain')
+    // settleOnChain=false → txHash = 'verified-offchain'
+    // PAYMENT-RESPONSE is base64-encoded JSON per x402 v2 spec
+    const paymentResponseB64 = response.headers.get('PAYMENT-RESPONSE')
+    expect(paymentResponseB64).toBeTruthy()
+    const paymentResponse = JSON.parse(Buffer.from(paymentResponseB64!, 'base64').toString('utf-8'))
+    expect(paymentResponse.x402Version).toBe(2)
+    expect(paymentResponse.payment.txHash).toBe('verified-offchain')
+    expect(paymentResponse.payment.network).toBe('eip155:5042002')
+
+    // Legacy header for backwards compatibility
     expect(response.headers.get('X-PAYMENT-TX-HASH')).toBe('verified-offchain')
   })
 
