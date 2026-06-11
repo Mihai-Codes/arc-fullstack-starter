@@ -32,6 +32,7 @@ import { privateKeyToAccount } from 'viem/accounts'
 import type { SessionKey } from './sessionKey.example'
 import {
   ARC_TESTNET_CAIP2,
+  DEFAULT_EIP3009_EXTRA,
   SIGNATURE_HEX_LENGTH,
   NONCE_HEX_LENGTH,
   type PaymentRequirements,
@@ -41,7 +42,7 @@ import {
 
 // Re-export the shared constant and types for backwards compatibility.
 // New code should import from './x402Types' directly.
-export { ARC_TESTNET_CAIP2 } from './x402Types'
+export { ARC_TESTNET_CAIP2, DEFAULT_EIP3009_EXTRA } from './x402Types'
 export type { PaymentRequirements, ResourceInfo } from './x402Types'
 
 export type TransferAuthorization = {
@@ -175,11 +176,7 @@ export function encodePaymentHeader(
       asset: '', // caller must populate for spec compliance
       payTo: signed.to,
       maxTimeoutSeconds: 300,
-      extra: {
-        assetTransferMethod: 'eip3009',
-        name: 'USD Coin',
-        version: '2',
-      },
+      extra: DEFAULT_EIP3009_EXTRA,
     },
     payload: {
       signature: signed.signature,

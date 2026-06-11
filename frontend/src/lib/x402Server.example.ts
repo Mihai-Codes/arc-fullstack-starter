@@ -71,6 +71,7 @@ import {
 import {
   ARC_TESTNET_CAIP2,
   X402_VERSION,
+  DEFAULT_EIP3009_EXTRA,
   type PaymentPayload,
   type PaymentRequired,
   type PaymentRequirements,
@@ -524,18 +525,7 @@ function buildPaymentRequiredResponse(config: X402ServerConfig): Response {
         asset: config.usdcAddress,
         payTo: config.treasuryAddress,
         maxTimeoutSeconds: 300, // 5 minutes to submit payment
-        extra: {
-          // x402 v2 spec: assetTransferMethod tells the client which transfer
-          // method to use. Default is "eip3009" for tokens with native
-          // transferWithAuthorization (like USDC). Other options: "permit2", "erc7710".
-          assetTransferMethod: 'eip3009',
-          // EIP-712 domain info — helps the client build the correct signature
-          // These MUST match the USDC contract's domain separator:
-          //   name: 'USD Coin' (NOT 'USDC' — see docs/X402_SESSION_KEYS.md pitfall #3)
-          //   version: '2'
-          name: 'USD Coin',
-          version: '2',
-        },
+        extra: DEFAULT_EIP3009_EXTRA,
       },
     ],
     // x402 v2 spec: extensions is an optional key-value map for protocol extensions.

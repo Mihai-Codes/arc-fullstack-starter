@@ -242,3 +242,10 @@ export const SIGNATURE_HEX_LENGTH = 132 as const
 
 /** Nonce length in hex chars (0x + 64 hex = 32 bytes) */
 export const NONCE_HEX_LENGTH = 66 as const
+
+/** Default `extra` fields for EIP-3009 exact scheme (USDC v2) */
+export const DEFAULT_EIP3009_EXTRA = {
+  assetTransferMethod: 'eip3009',
+  name: 'USD Coin',
+  version: '2',
+} as const

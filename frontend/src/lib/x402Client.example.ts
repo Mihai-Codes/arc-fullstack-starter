@@ -42,6 +42,11 @@
 
 import { loadSessionKey, hasSessionBudget, recordSpend, generateNonce } from './sessionKey.example'
 import { signTransferAuthorization, encodePaymentHeader, type TransferAuthorization } from './eip3009.example'
+import {
+  ARC_TESTNET_CAIP2,
+  DEFAULT_EIP3009_EXTRA,
+  type PaymentRequirements,
+} from './x402Types'
 
 // ─────────────────────────────────────────────────────────────────────────────
 // TYPES
@@ -56,23 +61,6 @@ import { signTransferAuthorization, encodePaymentHeader, type TransferAuthorizat
  */
 export type X402ClientConfig = {
   usdcAddress: string   // USDC contract address on Arc (6 decimals)
-}
-
-/**
- * The machine-readable payment requirement inside a 402 response body.
- *
- * Design principle: The server is an "auction house" — it publishes
- * what it accepts and the client decides whether to pay. Neither party
- * needs to know each other in advance. Any x402 client can pay any
- * x402 server as long as they agree on the scheme.
- */
-export type PaymentRequirement = {
-  scheme: string               // e.g. "exact" — pay this exact amount
-  network: string              // CAIP-2 format, e.g. "eip155:5042002"
-  amount: string               // USDC atomic units as string, e.g. "1000" = $0.001
-  payTo: string                // treasury wallet that receives payment
-  maxTimeoutSeconds: number    // validBefore must be within this window
-  asset: string                // USDC contract address (validate this matches your config)
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -92,7 +80,7 @@ export type PaymentRequirement = {
  * "Approve up to $0.05 USDC to continue reading."
  */
 export class X402SessionRequired extends Error {
-  constructor(public requirement: PaymentRequirement) {
+  constructor(public requirement: PaymentRequirements) {
     super('x402: No active session key. User must approve one first.')
     this.name = 'X402SessionRequired'
   }
@@ -193,7 +181,7 @@ export function createX402Client(config: X402ClientConfig) {
       // schemes or networks. We take the first one (simplification).
       // A production client would find the best matching scheme.
       const body = await initialResponse.json() as {
-        accepts?: PaymentRequirement[]
+        accepts?: PaymentRequirements[]
         resource?: { url: string; description?: string; mimeType?: string }
       }
       const requirement = body.accepts?.[0]
@@ -209,7 +197,7 @@ export function createX402Client(config: X402ClientConfig) {
       // requires a different network (e.g. Base Sepolia), the client
       // cannot fulfill the request. Fail fast instead of signing an
       // authorization for the wrong chain.
-      const SUPPORTED_NETWORKS = ['eip155:5042002'] // Arc Testnet only
+      const SUPPORTED_NETWORKS: string[] = [ARC_TESTNET_CAIP2] // Arc Testnet only
       if (!SUPPORTED_NETWORKS.includes(requirement.network)) {
         throw new Error(
           `x402: Server requires network "${requirement.network}" ` +
@@ -291,11 +279,7 @@ export function createX402Client(config: X402ClientConfig) {
         asset: requirement.asset,
         payTo: requirement.payTo,
         maxTimeoutSeconds: requirement.maxTimeoutSeconds,
-        extra: {
-          assetTransferMethod: 'eip3009',
-          name: 'USD Coin',
-          version: '2',
-        },
+        extra: DEFAULT_EIP3009_EXTRA,
       }, body.resource)
 
       // ── Step 8: Retry with Payment ────────────────────────────────────
