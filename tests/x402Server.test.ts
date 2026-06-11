@@ -118,6 +118,10 @@ describe('withX402', () => {
     expect(body.accepts.length).toBe(1)
     expect(body.accepts[0].scheme).toBe('exact')
     expect(body.accepts[0].network).toBe('eip155:5042002')
+    // x402 v2 spec: extra.assetTransferMethod defaults to "eip3009"
+    expect(body.accepts[0].extra.assetTransferMethod).toBe('eip3009')
+    // x402 v2 spec: extensions field should be present
+    expect(body.extensions).toEqual({})
   })
 
   test('402 amount matches priceUsdc in atomic units', async () => {
@@ -178,7 +182,7 @@ describe('withX402', () => {
     expect(response.status).toBe(200)
   })
 
-  test('returns 402 for malformed payment header', async () => {
+  test('returns 400 for malformed payment header', async () => {
     vi.mocked(eip3009Lib.decodePaymentHeader).mockImplementationOnce(() => {
       throw new Error('invalid base64')
     })
@@ -188,9 +192,10 @@ describe('withX402', () => {
       'PAYMENT-SIGNATURE': 'not-valid-base64',
     }))
 
-    expect(response.status).toBe(402)
+    // x402 v2 spec: malformed payment → HTTP 400 (Invalid Payment)
+    expect(response.status).toBe(400)
     const body = await response.json()
-    expect(body.code).toBe('INVALID_PAYMENT_HEADER')
+    expect(body.code).toBe('INVALID_PAYLOAD')
   })
 
   // ── Payment Verification ───────────────────────────────────────────────
@@ -207,7 +212,8 @@ describe('withX402', () => {
       'PAYMENT-SIGNATURE': 'base64',
     }))
 
-    expect(response.status).toBe(402)
+    // x402 v2 spec: invalid payment authorization → HTTP 400
+    expect(response.status).toBe(400)
     const body = await response.json()
     expect(body.code).toBe('PAYMENT_VERIFICATION_FAILED')
     expect(body.detail).toContain('expired')
@@ -225,7 +231,8 @@ describe('withX402', () => {
       'PAYMENT-SIGNATURE': 'base64',
     }))
 
-    expect(response.status).toBe(402)
+    // x402 v2 spec: invalid payment authorization → HTTP 400
+    expect(response.status).toBe(400)
     const body = await response.json()
     expect(body.detail).toContain('Insufficient')
   })
@@ -242,7 +249,8 @@ describe('withX402', () => {
       'PAYMENT-SIGNATURE': 'base64',
     }))
 
-    expect(response.status).toBe(402)
+    // x402 v2 spec: invalid payment authorization → HTTP 400
+    expect(response.status).toBe(400)
     const body = await response.json()
     expect(body.detail).toContain('Wrong recipient')
   })
@@ -256,7 +264,8 @@ describe('withX402', () => {
       'PAYMENT-SIGNATURE': 'base64',
     }))
 
-    expect(response.status).toBe(402)
+    // x402 v2 spec: invalid payment authorization → HTTP 400
+    expect(response.status).toBe(400)
     const body = await response.json()
     expect(body.detail).toContain('Signer mismatch')
   })
@@ -272,20 +281,21 @@ describe('withX402', () => {
     expect(handler).toHaveBeenCalledOnce()
   })
 
-  test('returns PAYMENT-RESPONSE header with tx hash', async () => {
+  test('returns PAYMENT-RESPONSE header with settlement proof', async () => {
     vi.mocked(eip3009Lib.decodePaymentHeader).mockReturnValueOnce(VALID_SIGNED_AUTH as any)
 
     const wrapped = withX402(TEST_CONFIG, handler)
     const response = await wrapped(makeRequest({ 'PAYMENT-SIGNATURE': 'base64' }))
 
     // settleOnChain=false → txHash = 'verified-offchain'
-    // PAYMENT-RESPONSE is base64-encoded JSON per x402 v2 spec
+    // x402 v2 spec SettlementResponse: { success, transaction, network, payer }
     const paymentResponseB64 = response.headers.get('PAYMENT-RESPONSE')
     expect(paymentResponseB64).toBeTruthy()
     const paymentResponse = JSON.parse(Buffer.from(paymentResponseB64!, 'base64').toString('utf-8'))
-    expect(paymentResponse.x402Version).toBe(2)
-    expect(paymentResponse.payment.txHash).toBe('verified-offchain')
-    expect(paymentResponse.payment.network).toBe('eip155:5042002')
+    expect(paymentResponse.success).toBe(true)
+    expect(paymentResponse.transaction).toBe('verified-offchain')
+    expect(paymentResponse.network).toBe('eip155:5042002')
+    expect(paymentResponse.payer).toBe('0xuser')
 
     // Legacy header for backwards compatibility
     expect(response.headers.get('X-PAYMENT-TX-HASH')).toBe('verified-offchain')

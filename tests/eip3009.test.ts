@@ -188,6 +188,39 @@ describe('Payment Header Encoding/Decoding', () => {
     expect(encoded).toMatch(/^[A-Za-z0-9+/=]+$/)
   })
 
+  test('encodePaymentHeader includes accepted from 402 response when provided', () => {
+    const accepted = {
+      scheme: 'exact',
+      network: 'eip155:5042002',
+      amount: '500000',
+      asset: '0xusdc',
+      payTo: '0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
+      maxTimeoutSeconds: 60,
+      extra: { assetTransferMethod: 'eip3009', name: 'USD Coin', version: '2' },
+    }
+    const resource = { url: '/api/premium', description: 'Premium data', mimeType: 'application/json' }
+
+    const encoded = encodePaymentHeader(mockSignedAuth, accepted, resource)
+    const json = JSON.parse(Buffer.from(encoded, 'base64').toString('utf-8'))
+
+    expect(json.accepted).toEqual(accepted)
+    expect(json.resource).toEqual(resource)
+    expect(json.x402Version).toBe(2)
+  })
+
+  test('encodePaymentHeader uses fallback accepted when none provided', () => {
+    const encoded = encodePaymentHeader(mockSignedAuth)
+    const json = JSON.parse(Buffer.from(encoded, 'base64').toString('utf-8'))
+
+    // Fallback should have the correct network and amount
+    expect(json.accepted.network).toBe('eip155:5042002')
+    expect(json.accepted.amount).toBe(mockSignedAuth.value.toString())
+    expect(json.accepted.scheme).toBe('exact')
+    expect(json.accepted.extra.assetTransferMethod).toBe('eip3009')
+    // resource should not be present when not provided
+    expect(json.resource).toBeUndefined()
+  })
+
   test('decodePaymentHeader reconstructs the SignedAuthorization', () => {
     const encoded = encodePaymentHeader(mockSignedAuth)
     const decoded = decodePaymentHeader(encoded)
@@ -202,6 +235,12 @@ describe('Payment Header Encoding/Decoding', () => {
     expect(decoded.to).toBe(mockSignedAuth.to)
     expect(decoded.nonce).toBe(mockSignedAuth.nonce)
     expect(decoded.signature).toBe(mockSignedAuth.signature)
+
+    // v, r, s are extracted from the 65-byte signature, not from the payload
+    // (x402 v2 spec doesn't include v,r,s in the Authorization object)
+    expect(decoded.v).toBe(27) // from mockSignedAuth.signature ending in '1b'
+    expect(decoded.r).toBe('0x1111111111111111111111111111111111111111111111111111111111111111')
+    expect(decoded.s).toBe('0x2222222222222222222222222222222222222222222222222222222222222222')
 
     // Verify the encoded payload follows x402 v2 spec structure
     const json = JSON.parse(Buffer.from(encoded, 'base64').toString('utf-8'))

@@ -304,14 +304,16 @@ export function withX402(
     try {
       signedAuth = decodePaymentHeader(paymentHeader)
     } catch {
+      // x402 v2 spec: malformed payment → HTTP 400 (Invalid Payment)
+      // NOT 402 — the client already knows payment is required.
       return new Response(
         JSON.stringify({
           error: 'Invalid payment header',
           detail: 'Could not decode PAYMENT-SIGNATURE header. Expected base64-encoded JSON.',
-          code: 'INVALID_PAYMENT_HEADER',
+          code: 'INVALID_PAYLOAD',
         }),
         {
-          status: 402,
+          status: 400,
           headers: { 'Content-Type': 'application/json' },
         }
       )
@@ -330,6 +332,8 @@ export function withX402(
     const verification = await verifyPayment(signedAuth, config)
     if (!verification.valid) {
       console.warn(`[x402] Verification failed: ${verification.reason}`)
+      // x402 v2 spec: invalid payment authorization → HTTP 400 (Invalid Payment)
+      // Maps to x402 error codes like invalid_exact_evm_payload_authorization_*
       return new Response(
         JSON.stringify({
           error: 'Payment verification failed',
@@ -337,7 +341,7 @@ export function withX402(
           code: 'PAYMENT_VERIFICATION_FAILED',
         }),
         {
-          status: 402,
+          status: 400,
           headers: { 'Content-Type': 'application/json' },
         }
       )
@@ -357,6 +361,8 @@ export function withX402(
       } catch (error) {
         const message = error instanceof Error ? error.message : 'Unknown settlement error'
         console.error(`[x402] Settlement failed: ${message}`)
+        // x402 v2 spec: settlement failure → HTTP 402 (Payment Failed)
+        // The payment was valid but settlement on-chain failed.
         return new Response(
           JSON.stringify({
             error: 'Payment settlement failed',
@@ -406,18 +412,16 @@ export function withX402(
     const response = await handler(req)
 
     // Add x402 settlement proof headers to the response.
-    // Clients can use these to verify the payment was settled.
     //
-    // x402 v2 spec: PAYMENT-RESPONSE is base64-encoded JSON, not a plain string.
-    // This allows the header to carry structured settlement proof data.
+    // x402 v2 spec (SettlementResponse schema):
+    //   { success, transaction, network, payer }
+    // This is the canonical machine-readable settlement confirmation.
     const headers = new Headers(response.headers)
     const paymentResponse = {
-      x402Version: 2,
-      payment: {
-        txHash,
-        network: ARC_TESTNET_CAIP2,
-        scheme: 'exact',
-      },
+      success: true,
+      transaction: txHash,
+      network: ARC_TESTNET_CAIP2,
+      payer: signedAuth.from, // the wallet that authorized the payment
     }
     headers.set('PAYMENT-RESPONSE', Buffer.from(JSON.stringify(paymentResponse)).toString('base64'))
     headers.set('X-PAYMENT-TX-HASH', txHash)
@@ -460,9 +464,9 @@ function buildPaymentRequiredResponse(config: X402ServerConfig): Response {
     accepts: [
       {
         scheme: 'exact',
-    // CAIP-2 network identifier for Arc Testnet
-    // Ref: https://github.com/ChainAgnostic/namespaces/blob/main/CAIPs/caip-2.md
-    network: ARC_TESTNET_CAIP2,
+        // CAIP-2 network identifier for Arc Testnet
+        // Ref: https://github.com/ChainAgnostic/namespaces/blob/main/CAIPs/caip-2.md
+        network: ARC_TESTNET_CAIP2,
         // Amount in atomic units (6 decimals for USDC)
         // priceUsdc=0.001 → "1000", priceUsdc=5.0 → "5000000"
         amount: String(Math.round(config.priceUsdc * 1e6)),
@@ -471,6 +475,10 @@ function buildPaymentRequiredResponse(config: X402ServerConfig): Response {
         payTo: config.treasuryAddress,
         maxTimeoutSeconds: 300, // 5 minutes to submit payment
         extra: {
+          // x402 v2 spec: assetTransferMethod tells the client which transfer
+          // method to use. Default is "eip3009" for tokens with native
+          // transferWithAuthorization (like USDC). Other options: "permit2", "erc7710".
+          assetTransferMethod: 'eip3009',
           // EIP-712 domain info — helps the client build the correct signature
           // These MUST match the USDC contract's domain separator:
           //   name: 'USD Coin' (NOT 'USDC' — see docs/X402_SESSION_KEYS.md pitfall #3)
@@ -480,6 +488,9 @@ function buildPaymentRequiredResponse(config: X402ServerConfig): Response {
         },
       },
     ],
+    // x402 v2 spec: extensions is an optional key-value map for protocol extensions.
+    // Empty object means no extensions — but the field should be present per spec.
+    extensions: {},
   }
 
   return new Response(JSON.stringify(body), {

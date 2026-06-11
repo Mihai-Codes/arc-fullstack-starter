@@ -146,20 +146,45 @@ export async function signTransferAuthorization(
 
 /**
  * Base64 encode the signed authorization for HTTP header transport.
+ *
+ * x402 v2 PaymentPayload structure:
+ *   { x402Version, resource?, accepted, payload: { signature, authorization } }
+ *
+ * The `accepted` field echoes back the server's PaymentRequirements from the
+ * 402 response, proving the client is paying the correct amount for the
+ * correct resource on the correct network.
  */
-export function encodePaymentHeader(signed: SignedAuthorization): string {
+export function encodePaymentHeader(
+  signed: SignedAuthorization,
+  /** The server's PaymentRequirements from the 402 response (echoed back) */
+  accepted?: {
+    scheme: string
+    network: string
+    amount: string
+    asset: string
+    payTo: string
+    maxTimeoutSeconds: number
+    extra?: Record<string, unknown>
+  },
+  /** The resource being paid for (optional, from the 402 response) */
+  resource?: { url: string; description?: string; mimeType?: string }
+): string {
   const paymentPayload = {
     x402Version: 2,
-    // x402 v2 spec: PaymentPayload includes the resource being paid for
-    // and the accepted payment terms — these echo back the server's 402 response
-    // so the server can verify the client is paying for the correct resource.
-    resource: undefined, // populated by the caller (x402Client) when available
-    accepted: undefined, // populated by the caller (x402Client) when available
-    scheme: 'exact',
-    // CAIP-2 network identifier for Arc Testnet
-    // Must match the server's 402 response (x402Server.example.ts line ~440)
-    // Ref: https://github.com/ChainAgnostic/namespaces/blob/main/CAIPs/caip-2.md
-    network: ARC_TESTNET_CAIP2,
+    ...(resource ? { resource } : {}),
+    accepted: accepted ?? {
+      scheme: 'exact',
+      network: ARC_TESTNET_CAIP2,
+      amount: signed.value.toString(),
+      asset: '', // caller must populate for spec compliance
+      payTo: signed.to,
+      maxTimeoutSeconds: 300,
+      extra: {
+        assetTransferMethod: 'eip3009',
+        name: 'USD Coin',
+        version: '2',
+      },
+    },
     payload: {
       signature: signed.signature,
       authorization: {
@@ -230,6 +255,20 @@ export function decodePaymentHeader(header: string): SignedAuthorization {
   if (validAfter < 0n) throw new Error(`Invalid validAfter: ${auth.validAfter} (must be non-negative)`)
   if (validBefore < 0n) throw new Error(`Invalid validBefore: ${auth.validBefore} (must be non-negative)`)
 
+  // x402 v2 spec: the Authorization object inside payload does NOT include
+  // v, r, s — only the full 65-byte signature. Extract them here so callers
+  // who access signedAuth.v / signedAuth.r / signedAuth.s (e.g. for
+  // transferWithAuthorization on-chain call) get correct values.
+  //
+  // ECDSA signature layout: 0x + r(32 bytes) + s(32 bytes) + v(1 byte)
+  //   r = hex chars 2..66   (32 bytes)
+  //   s = hex chars 66..130 (32 bytes)
+  //   v = hex chars 130..132 (1 byte, recovery param)
+  const sig = payload.signature as string
+  const r = `0x${sig.slice(2, 66)}` as `0x${string}`
+  const s = `0x${sig.slice(66, 130)}` as `0x${string}`
+  const v = parseInt(sig.slice(130, 132), 16)
+
   return {
     from: auth.from as `0x${string}`,
     to: auth.to as `0x${string}`,
@@ -237,13 +276,9 @@ export function decodePaymentHeader(header: string): SignedAuthorization {
     validAfter,
     validBefore,
     nonce: auth.nonce as `0x${string}`,
-    // v, r, s are not part of the x402 v2 PaymentPayload spec.
-    // The full 65-byte signature is sufficient for ecrecover.
-    // These are kept as 0 defaults for backwards compatibility with
-    // code that accesses signedAuth.v / signedAuth.r / signedAuth.s.
-    v: auth.v ?? 0,
-    r: (auth.r ?? '0x0000000000000000000000000000000000000000000000000000000000000000') as `0x${string}`,
-    s: (auth.s ?? '0x0000000000000000000000000000000000000000000000000000000000000000') as `0x${string}`,
-    signature: payload.signature as `0x${string}`,
+    v,
+    r,
+    s,
+    signature: sig as `0x${string}`,
   }
 }

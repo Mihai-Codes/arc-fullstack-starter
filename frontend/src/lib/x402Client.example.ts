@@ -192,13 +192,29 @@ export function createX402Client(config: X402ClientConfig) {
       // `accepts` is an array: the server may accept multiple payment
       // schemes or networks. We take the first one (simplification).
       // A production client would find the best matching scheme.
-      const body = await initialResponse.json() as { accepts?: PaymentRequirement[] }
+      const body = await initialResponse.json() as {
+        accepts?: PaymentRequirement[]
+        resource?: { url: string; description?: string; mimeType?: string }
+      }
       const requirement = body.accepts?.[0]
 
       if (!requirement) {
         // Malformed 402: server returned the status but no requirements.
         // This is a server-side bug — we can't proceed without knowing what to pay.
         throw new Error('x402: Server returned 402 with no payment requirements in body.')
+      }
+
+      // ── Step 2b: Validate network matches expected ───────────────────
+      // The client must only pay on networks it supports. If the server
+      // requires a different network (e.g. Base Sepolia), the client
+      // cannot fulfill the request. Fail fast instead of signing an
+      // authorization for the wrong chain.
+      const SUPPORTED_NETWORKS = ['eip155:5042002'] // Arc Testnet only
+      if (!SUPPORTED_NETWORKS.includes(requirement.network)) {
+        throw new Error(
+          `x402: Server requires network "${requirement.network}" ` +
+          `but this client only supports: ${SUPPORTED_NETWORKS.join(', ')}`
+        )
       }
 
       // ── Step 3: Load the Session Key ──────────────────────────────────
@@ -265,7 +281,22 @@ export function createX402Client(config: X402ClientConfig) {
       // Serialize the signed authorization as JSON, then base64-encode it.
       // Base64 is required because HTTP headers cannot contain raw binary
       // or arbitrary special characters.
-      const headerValue = encodePaymentHeader(signed)
+      //
+      // x402 v2 spec: the PaymentPayload must include `accepted` echoing
+      // back the server's PaymentRequirements, and optionally `resource`.
+      const headerValue = encodePaymentHeader(signed, {
+        scheme: requirement.scheme,
+        network: requirement.network,
+        amount: requirement.amount,
+        asset: requirement.asset,
+        payTo: requirement.payTo,
+        maxTimeoutSeconds: requirement.maxTimeoutSeconds,
+        extra: {
+          assetTransferMethod: 'eip3009',
+          name: 'USD Coin',
+          version: '2',
+        },
+      }, body.resource)
 
       // ── Step 8: Retry with Payment ────────────────────────────────────
       // Re-send the original request with the payment proof attached.
@@ -295,10 +326,9 @@ export function createX402Client(config: X402ClientConfig) {
 
       // Payment was rejected. Throw typed error with the status code.
       // Debugging guide:
-      //   402 on retry  → signature invalid (wrong domain? wrong key?)
-      //   402 on retry  → nonce already used (replay detected)
-      //   402 on retry  → validBefore already passed
-      //   500           → settler failed to submit on-chain
+      //   400 on retry  → invalid payment (malformed header, bad signature, wrong amount)
+      //   402 on retry  → payment required / replay detected / settlement failed
+      //   500           → server error during settlement
       throw new X402PaymentFailed(paidResponse.status)
     }
 

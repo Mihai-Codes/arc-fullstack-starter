@@ -75,8 +75,17 @@ describe('createX402Client', () => {
     await expect(client.fetch('https://api.example.com')).rejects.toThrow(/no payment requirements/)
   })
 
+  test('throws Error if 402 response requires unsupported network', async () => {
+    const requirement = { amount: '1000', payTo: '0xtreasury', maxTimeoutSeconds: 60, network: 'eip155:84532' }
+    const mockResponse = new Response(JSON.stringify({ accepts: [requirement] }), { status: 402 })
+    vi.mocked(globalThis.fetch).mockResolvedValueOnce(mockResponse)
+
+    const client = createX402Client(config)
+    await expect(client.fetch('https://api.example.com')).rejects.toThrow(/only supports/)
+  })
+
   test('throws X402SessionRequired if no session key exists', async () => {
-    const requirement = { amount: '1000', payTo: '0xtreasury', maxTimeoutSeconds: 60 }
+    const requirement = { amount: '1000', payTo: '0xtreasury', maxTimeoutSeconds: 60, network: 'eip155:5042002' }
     const mockResponse = new Response(JSON.stringify({ accepts: [requirement] }), { status: 402 })
     
     vi.mocked(globalThis.fetch).mockResolvedValueOnce(mockResponse)
@@ -87,7 +96,7 @@ describe('createX402Client', () => {
   })
 
   test('throws X402InsufficientBudget if budget is exceeded', async () => {
-    const requirement = { amount: '5000000', payTo: '0xtreasury', maxTimeoutSeconds: 60 }
+    const requirement = { amount: '5000000', payTo: '0xtreasury', maxTimeoutSeconds: 60, network: 'eip155:5042002' }
     const mockResponse = new Response(JSON.stringify({ accepts: [requirement] }), { status: 402 })
     
     vi.mocked(globalThis.fetch).mockResolvedValueOnce(mockResponse)
@@ -145,7 +154,7 @@ describe('createX402Client', () => {
   })
 
   test('throws X402PaymentFailed if the retried request is also rejected', async () => {
-    const requirement = { amount: '1000000', payTo: '0xtreasury', maxTimeoutSeconds: 60 }
+    const requirement = { amount: '1000000', payTo: '0xtreasury', maxTimeoutSeconds: 60, network: 'eip155:5042002' }
     const mock402 = new Response(JSON.stringify({ accepts: [requirement] }), { status: 402 })
     const mock402Retry = new Response('still payment required', { status: 402 })
 
