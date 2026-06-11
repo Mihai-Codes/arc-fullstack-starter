@@ -25,7 +25,7 @@
  *     - User tier (free vs premium)
  */
 
-import { withX402 } from '@/lib/x402Server.example'
+import { withX402 } from '../../../../lib/x402Server.example'
 
 // ─── Route Configuration ───────────────────────────────────────────────────
 //
