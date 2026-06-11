@@ -501,10 +501,15 @@ const toAtomic = (usdc: number) => BigInt(Math.round(usdc * 1_000_000))
 | File | Purpose |
 |------|---------|
 | `docs/X402_SESSION_KEYS.md` | This guide |
+| `frontend/src/lib/x402Types.ts` | Shared x402 v2 types and constants (single source of truth) |
 | `frontend/src/lib/sessionKey.example.ts` | Session key generation, storage, lifecycle |
 | `frontend/src/lib/eip3009.example.ts` | EIP-3009 signing, header encoding/decoding |
 | `frontend/src/lib/x402Client.example.ts` | x402-aware fetch wrapper (client side) |
 | `frontend/src/lib/x402Server.example.ts` | x402 payment middleware (server side) |
 | `frontend/src/app/api/x402/agent-insight/route.ts` | Example protected endpoint |
+| `tests/x402Server.test.ts` | 18 server middleware tests |
+| `tests/x402Client.test.ts` | 23 client wrapper tests |
+| `tests/eip3009.test.ts` | 20 EIP-3009 signing tests |
+| `tests/x402Handshake.test.ts` | 5 end-to-end handshake tests |
 | `scripts/x402_demo.ts` | Minimal runnable demo: 402 → sign → retry → success |
 | `scripts/x402_full_demo.ts` | Extended demo with full session key lifecycle |

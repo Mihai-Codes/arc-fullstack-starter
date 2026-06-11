@@ -34,13 +34,23 @@ This repository is optimized for learning. Code density is reduced by 40% compar
 ### 1. Architectural & Protocol Documentation
 - **[docs/X402_SESSION_KEYS.md](./docs/X402_SESSION_KEYS.md)**: A comprehensive guide covering the mental model, three-layer architecture, production checklist, and Arc-specific pitfalls.
 
-### 2. Simplified Example Implementations
+### 2. Shared Types (Single Source of Truth)
+- **[frontend/src/lib/x402Types.ts](./frontend/src/lib/x402Types.ts)**: All x402 v2 spec-compliant types (`PaymentRequired`, `PaymentPayload`, `SettlementResponse`, `VerifyResponse`, `SupportedResponse`) and shared constants (`ARC_TESTNET_CAIP2`, `X402_VERSION`, `DEFAULT_EIP3009_EXTRA`). Both client and server import from here — no duplicate type definitions.
+
+### 3. Simplified Example Implementations
 - **[frontend/src/lib/sessionKey.example.ts](./frontend/src/lib/sessionKey.example.ts)**: Pure-functional session key generation, EIP-712 auth message builder, budget, and sessionStorage lifecycle.
 - **[frontend/src/lib/eip3009.example.ts](./frontend/src/lib/eip3009.example.ts)**: Constructing and signing EIP-3009 meta-transactions using the session key's private key.
 - **[frontend/src/lib/x402Client.example.ts](./frontend/src/lib/x402Client.example.ts)**: A drop-in `fetch` wrapper that auto-intercepts `402`, handles background signing, and retries with payment headers.
+- **[frontend/src/lib/x402Server.example.ts](./frontend/src/lib/x402Server.example.ts)**: Full `withX402()` middleware — validates 402 responses, verifies EIP-3009 signatures via ecrecover, deduplicates nonces in-memory, and settles off-chain or on-chain.
 
-### 3. Runnable Local Simulation (No Browser Required)
+### 4. Runnable Local Simulation (No Browser Required)
 - **[scripts/x402_full_demo.ts](./scripts/x402_full_demo.ts)**: A standalone Node.js script that simulates the entire user approval, 402 rejection, session key signing, and successful server settlement flow.
+
+### 5. Tests (92 passing)
+- **[tests/x402Server.test.ts](./tests/x402Server.test.ts)**: 18 tests — input validation, accepted field checks, replay detection, TOCTOU race condition, settlement response schema.
+- **[tests/x402Client.test.ts](./tests/x402Client.test.ts)**: 23 tests — passthrough, error taxonomy, network validation, full challenge-response loop.
+- **[tests/eip3009.test.ts](./tests/eip3009.test.ts)**: 20 tests — EIP-712 domain, nonce validation, signature verification, decodeFullPaymentPayload, encodePaymentHeader.
+- **[tests/x402Handshake.test.ts](./tests/x402Handshake.test.ts)**: 5 end-to-end tests — full crypto flow with real keys (no mocks for signing), accepted field validation, replay detection.
 
 ---
 
@@ -66,3 +76,30 @@ While existing repositories (like `circlefin/arc-*`) focus on basic transaction 
 3. **Server-Side Settler Meta-Transaction Relayer:** A pre-configured server wrapper that validates off-chain EIP-712 signatures and settles transactions directly via standard RPC providers.
 
 By open-sourcing these primitives, other developers can instantly incorporate frictionless pay-per-use, pay-per-crawl, and autonomous agent loops into their Arc projects.
+
+---
+
+## ⚠️ What's Not Covered (Intentional Gaps)
+
+This is an educational implementation. The following are production hardening concerns that belong in a separate `production/` example, not in the `.example.ts` pedagogical layer:
+
+| Gap | Why It's Omitted | What You'd Add |
+|---|---|---|
+| **Nonce persistence** | In-memory `Map` resets on restart — acceptable for demos | PostgreSQL/Redis-backed nonce store with TTL |
+| **Rate limiting** | Not part of the x402 protocol itself | Per-IP and per-session-key rate limits |
+| **Multi-scheme negotiation** | Client picks first `accepts` entry | Scheme preference ranking, fallback chains |
+| **Facilitator integration** | `POST /verify` and `POST /settle` stubs | Wire to a real x402 facilitator service |
+| **HTTPS/TLS** | Local dev only | TLS termination in production |
+| **Error telemetry** | No logging infrastructure | Structured logging, metrics, alerting |
+
+### Security Model (What IS Covered)
+
+All 5 documented attacks from arXiv `2605.11781` are mitigated:
+
+| Attack | Mitigation | Code Location |
+|---|---|---|
+| **Frontrunning (TOCTOU)** | Nonce marked used BEFORE handler executes | `x402Server.example.ts:432-442` |
+| **Cache poisoning** | `validAfter` check rejects future-dated auths | `x402Server.example.ts:576-585` |
+| **Signature malleability** | EIP-712 typed data signatures are non-malleable by design | `eip3009.example.ts` (recoverTypedDataAddress) |
+| **Amount manipulation** | Server validates `accepted.amount` matches config | `x402Server.example.ts:488-493` |
+| **Expiry bypass** | `validBefore` check rejects expired auths | `x402Server.example.ts:588-591` |
