@@ -49,16 +49,7 @@ vi.mock('../frontend/src/lib/eip3009.example', () => ({
     primaryType: 'TransferWithAuthorization',
     message: {},
   })),
-}))
-
-vi.mock('../frontend/src/lib/eip3009.example', () => ({
-  decodePaymentHeader: vi.fn(),
-  buildTransferAuthorizationMessage: vi.fn(() => ({
-    domain: { name: 'USD Coin', version: '2', chainId: 5042002, verifyingContract: '0xusdc' },
-    types: { TransferWithAuthorization: [] },
-    primaryType: 'TransferWithAuthorization',
-    message: {},
-  })),
+  ARC_TESTNET_CAIP2: 'eip155:5042002',
 }))
 
 // ─── Test Config ────────────────────────────────────────────────────────────

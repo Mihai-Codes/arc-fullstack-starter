@@ -46,8 +46,8 @@ x402 payment challenge (402):
   "accepts": [
     {
       "scheme": "exact",
-      "network": "arc-testnet-5042002",
-      "maxAmountRequired": "1000",
+      "network": "eip155:5042002",
+      "amount": "1000",
       "payTo": "0x8888888888888888888888888888888888888888",
       "asset": "0xUSDC_CONTRACT_ADDRESS",
       "maxTimeoutSeconds": 300
@@ -59,8 +59,8 @@ x402 payment challenge (402):
 | Field | Meaning |
 |-------|---------|
 | `scheme` | `"exact"` = pay exactly this amount |
-| `network` | Chain identifier — `"arc-testnet-5042002"` for Arc Testnet |
-| `maxAmountRequired` | Amount in **atomic units** (6 decimals). `"1000"` = $0.001 USDC |
+| `network` | Chain identifier — `"eip155:5042002"` for Arc Testnet |
+| `amount` | Amount in **atomic units** (6 decimals). `"1000"` = $0.001 USDC |
 | `payTo` | Recipient/treasury wallet address |
 | `asset` | USDC contract address on Arc |
 | `maxTimeoutSeconds` | `validBefore` must be within this many seconds of now |

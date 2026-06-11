@@ -33,6 +33,13 @@ import type { SessionKey } from './sessionKey.example'
 
 // ─── TYPES & CONFIGS ────────────────────────────────────────────────────────
 
+/**
+ * CAIP-2 network identifier for Arc Testnet.
+ * Used in x402 PaymentPayload.network and PaymentRequired.accepts.network.
+ * Ref: https://github.com/ChainAgnostic/namespaces/blob/main/CAIPs/caip-2.md
+ */
+export const ARC_TESTNET_CAIP2 = 'eip155:5042002' as const
+
 export type TransferAuthorization = {
   from: `0x${string}`         // user's session key address
   to: `0x${string}`           // recipient (treasury)
@@ -143,22 +150,26 @@ export async function signTransferAuthorization(
 export function encodePaymentHeader(signed: SignedAuthorization): string {
   const paymentPayload = {
     x402Version: 2,
+    // x402 v2 spec: PaymentPayload includes the resource being paid for
+    // and the accepted payment terms — these echo back the server's 402 response
+    // so the server can verify the client is paying for the correct resource.
+    resource: undefined, // populated by the caller (x402Client) when available
+    accepted: undefined, // populated by the caller (x402Client) when available
     scheme: 'exact',
     // CAIP-2 network identifier for Arc Testnet
     // Must match the server's 402 response (x402Server.example.ts line ~440)
     // Ref: https://github.com/ChainAgnostic/namespaces/blob/main/CAIPs/caip-2.md
-    network: 'eip155:5042002',
+    network: ARC_TESTNET_CAIP2,
     payload: {
       signature: signed.signature,
-      from: signed.from,
-      to: signed.to,
-      value: signed.value.toString(),
-      validAfter: signed.validAfter.toString(),
-      validBefore: signed.validBefore.toString(),
-      nonce: signed.nonce,
-      v: signed.v,
-      r: signed.r,
-      s: signed.s,
+      authorization: {
+        from: signed.from,
+        to: signed.to,
+        value: signed.value.toString(),
+        validAfter: signed.validAfter.toString(),
+        validBefore: signed.validBefore.toString(),
+        nonce: signed.nonce,
+      },
     },
   }
 
@@ -190,37 +201,49 @@ export function decodePaymentHeader(header: string): SignedAuthorization {
     throw new Error('Payment header missing payload')
   }
 
+  // x402 v2 spec uses nested authorization: payload.authorization.{from,to,...}
+  // Legacy format uses flat: payload.{from,to,...}
+  // Accept both for backwards compatibility.
+  const auth = payload.authorization ?? payload
+
   // Validate required fields exist and have correct types
-  const requiredFields = ['from', 'to', 'value', 'validAfter', 'validBefore', 'nonce', 'v', 'r', 's', 'signature'] as const
+  const requiredFields = ['from', 'to', 'value', 'validAfter', 'validBefore', 'nonce'] as const
   for (const field of requiredFields) {
-    if (payload[field] === undefined || payload[field] === null) {
+    if (auth[field] === undefined || auth[field] === null) {
       throw new Error(`Payment header missing required field: ${field}`)
     }
+  }
+  if (payload.signature === undefined || payload.signature === null) {
+    throw new Error('Payment header missing required field: signature')
   }
 
   // Validate address formats (must be 0x + 40 hex chars)
   const addrRegex = /^0x[0-9a-fA-F]{40}$/
-  if (!addrRegex.test(payload.from)) throw new Error(`Invalid from address: ${payload.from}`)
-  if (!addrRegex.test(payload.to)) throw new Error(`Invalid to address: ${payload.to}`)
+  if (!addrRegex.test(auth.from)) throw new Error(`Invalid from address: ${auth.from}`)
+  if (!addrRegex.test(auth.to)) throw new Error(`Invalid to address: ${auth.to}`)
 
   // Validate bigint fields are non-negative numbers
-  const value = BigInt(payload.value)
-  const validAfter = BigInt(payload.validAfter)
-  const validBefore = BigInt(payload.validBefore)
-  if (value < 0n) throw new Error(`Invalid value: ${payload.value} (must be non-negative)`)
-  if (validAfter < 0n) throw new Error(`Invalid validAfter: ${payload.validAfter} (must be non-negative)`)
-  if (validBefore < 0n) throw new Error(`Invalid validBefore: ${payload.validBefore} (must be non-negative)`)
+  const value = BigInt(auth.value)
+  const validAfter = BigInt(auth.validAfter)
+  const validBefore = BigInt(auth.validBefore)
+  if (value < 0n) throw new Error(`Invalid value: ${auth.value} (must be non-negative)`)
+  if (validAfter < 0n) throw new Error(`Invalid validAfter: ${auth.validAfter} (must be non-negative)`)
+  if (validBefore < 0n) throw new Error(`Invalid validBefore: ${auth.validBefore} (must be non-negative)`)
 
   return {
-    from: payload.from as `0x${string}`,
-    to: payload.to as `0x${string}`,
+    from: auth.from as `0x${string}`,
+    to: auth.to as `0x${string}`,
     value,
     validAfter,
     validBefore,
-    nonce: payload.nonce as `0x${string}`,
-    v: payload.v,
-    r: payload.r as `0x${string}`,
-    s: payload.s as `0x${string}`,
+    nonce: auth.nonce as `0x${string}`,
+    // v, r, s are not part of the x402 v2 PaymentPayload spec.
+    // The full 65-byte signature is sufficient for ecrecover.
+    // These are kept as 0 defaults for backwards compatibility with
+    // code that accesses signedAuth.v / signedAuth.r / signedAuth.s.
+    v: auth.v ?? 0,
+    r: (auth.r ?? '0x0000000000000000000000000000000000000000000000000000000000000000') as `0x${string}`,
+    s: (auth.s ?? '0x0000000000000000000000000000000000000000000000000000000000000000') as `0x${string}`,
     signature: payload.signature as `0x${string}`,
   }
 }

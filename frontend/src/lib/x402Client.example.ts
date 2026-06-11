@@ -68,8 +68,8 @@ export type X402ClientConfig = {
  */
 export type PaymentRequirement = {
   scheme: string               // e.g. "exact" — pay this exact amount
-  network: string              // e.g. "arc-testnet-5042002"
-  maxAmountRequired: string    // USDC atomic units as string, e.g. "1000" = $0.001
+  network: string              // CAIP-2 format, e.g. "eip155:5042002"
+  amount: string               // USDC atomic units as string, e.g. "1000" = $0.001
   payTo: string                // treasury wallet that receives payment
   maxTimeoutSeconds: number    // validBefore must be within this window
   asset: string                // USDC contract address (validate this matches your config)
@@ -217,7 +217,7 @@ export function createX402Client(config: X402ClientConfig) {
       // Convert the server's atomic units to a human-readable USDC float.
       // CRITICAL: USDC has 6 decimals on Arc. Divide by 1_000_000, NOT 1e18.
       // Using 1e18 here would accept payments ~10^12x larger than intended.
-      const amountUsdc = Number(requirement.maxAmountRequired) / 1_000_000
+      const amountUsdc = Number(requirement.amount) / 1_000_000
 
       if (!hasSessionBudget(amountUsdc)) {
         const available = sessionKey.config.maxAmountUsdc - sessionKey.spentUsdc
@@ -237,7 +237,7 @@ export function createX402Client(config: X402ClientConfig) {
       const transferAuth: TransferAuthorization = {
         from: sessionKey.address,                       // session key = USDC source
         to: requirement.payTo as `0x${string}`,         // treasury from the 402 body
-        value: BigInt(requirement.maxAmountRequired),   // atomic units (6 decimals)
+        value: BigInt(requirement.amount),   // atomic units (6 decimals)
         validAfter: BigInt(0),                          // valid immediately after signing
         // validBefore: DERIVE from server's timeout — never hardcode or use 0.
         // The USDC contract checks block.timestamp < validBefore on-chain.

@@ -103,7 +103,7 @@ const mockServer = {
           accepts: [{
             scheme: 'exact',
             network: `arc-testnet-${ARC_CHAIN_ID}`,
-            maxAmountRequired: String(this.priceAtomic),  // always a string
+            amount: String(this.priceAtomic),  // always a string
             payTo: this.treasuryAddress,
             asset: MOCK_USDC_ADDRESS,
             maxTimeoutSeconds: 300,  // client has 5 min to sign and retry
@@ -193,10 +193,10 @@ async function runDemo() {
 
   // Parse the payment requirement from the 402 body
   const body402 = firstResponse.body as { accepts: Array<{
-    maxAmountRequired: string; payTo: string; maxTimeoutSeconds: number
+    amount: string; payTo: string; maxTimeoutSeconds: number
   }> }
   const req = body402.accepts[0]
-  const amountUsdc = Number(req.maxAmountRequired) / USDC_ATOMIC_MULTIPLIER
+  const amountUsdc = Number(req.amount) / USDC_ATOMIC_MULTIPLIER
 
   console.log(`\n   Parsed requirement: pay ${amountUsdc} USDC to ${req.payTo}`)
   console.log(`   Time window: ${req.maxTimeoutSeconds} seconds to sign and retry\n`)
@@ -217,7 +217,7 @@ async function runDemo() {
   const transferAuth = {
     from: sessionAccount.address,                       // session key = USDC source
     to: getAddress(req.payTo) as `0x${string}`,        // treasury from 402 body
-    value: BigInt(req.maxAmountRequired),               // 6 decimals, NOT 18
+    value: BigInt(req.amount),               // 6 decimals, NOT 18
     validAfter: BigInt(0),                              // valid immediately
     // CRITICAL: validBefore must be a FUTURE timestamp.
     // Using 0n = "already expired" = USDC contract rejects.

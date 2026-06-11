@@ -65,6 +65,7 @@ import { privateKeyToAccount } from 'viem/accounts'
 import {
   decodePaymentHeader,
   buildTransferAuthorizationMessage,
+  ARC_TESTNET_CAIP2,
   type SignedAuthorization,
 } from './eip3009.example'
 
@@ -414,7 +415,7 @@ export function withX402(
       x402Version: 2,
       payment: {
         txHash,
-        network: 'eip155:5042002',
+        network: ARC_TESTNET_CAIP2,
         scheme: 'exact',
       },
     }
@@ -459,9 +460,9 @@ function buildPaymentRequiredResponse(config: X402ServerConfig): Response {
     accepts: [
       {
         scheme: 'exact',
-        // CAIP-2 network identifier for Arc Testnet
-        // Ref: https://github.com/ChainAgnostic/namespaces/blob/main/CAIPs/caip-2.md
-        network: 'eip155:5042002',
+    // CAIP-2 network identifier for Arc Testnet
+    // Ref: https://github.com/ChainAgnostic/namespaces/blob/main/CAIPs/caip-2.md
+    network: ARC_TESTNET_CAIP2,
         // Amount in atomic units (6 decimals for USDC)
         // priceUsdc=0.001 → "1000", priceUsdc=5.0 → "5000000"
         amount: String(Math.round(config.priceUsdc * 1e6)),

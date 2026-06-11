@@ -76,7 +76,7 @@ describe('createX402Client', () => {
   })
 
   test('throws X402SessionRequired if no session key exists', async () => {
-    const requirement = { maxAmountRequired: '1000', payTo: '0xtreasury', maxTimeoutSeconds: 60 }
+    const requirement = { amount: '1000', payTo: '0xtreasury', maxTimeoutSeconds: 60 }
     const mockResponse = new Response(JSON.stringify({ accepts: [requirement] }), { status: 402 })
     
     vi.mocked(globalThis.fetch).mockResolvedValueOnce(mockResponse)
@@ -87,7 +87,7 @@ describe('createX402Client', () => {
   })
 
   test('throws X402InsufficientBudget if budget is exceeded', async () => {
-    const requirement = { maxAmountRequired: '5000000', payTo: '0xtreasury', maxTimeoutSeconds: 60 }
+    const requirement = { amount: '5000000', payTo: '0xtreasury', maxTimeoutSeconds: 60 }
     const mockResponse = new Response(JSON.stringify({ accepts: [requirement] }), { status: 402 })
     
     vi.mocked(globalThis.fetch).mockResolvedValueOnce(mockResponse)
@@ -106,11 +106,11 @@ describe('createX402Client', () => {
 
   test('successfully pays, attaches headers, retries request, and records spend', async () => {
     const requirement = { 
-      maxAmountRequired: '1000000', // 1 USDC 
+      amount: '1000000', // 1 USDC 
       payTo: '0xtreasury', 
       maxTimeoutSeconds: 60, 
       asset: '0xmockusdcaddress', 
-      network: 'arc-testnet-5042002' 
+      network: 'eip155:5042002' 
     }
     const mock402 = new Response(JSON.stringify({ accepts: [requirement] }), { status: 402 })
     const mock200 = new Response('success', { status: 200 })
@@ -145,7 +145,7 @@ describe('createX402Client', () => {
   })
 
   test('throws X402PaymentFailed if the retried request is also rejected', async () => {
-    const requirement = { maxAmountRequired: '1000000', payTo: '0xtreasury', maxTimeoutSeconds: 60 }
+    const requirement = { amount: '1000000', payTo: '0xtreasury', maxTimeoutSeconds: 60 }
     const mock402 = new Response(JSON.stringify({ accepts: [requirement] }), { status: 402 })
     const mock402Retry = new Response('still payment required', { status: 402 })
 

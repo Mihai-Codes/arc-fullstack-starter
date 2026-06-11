@@ -202,8 +202,11 @@ describe('Payment Header Encoding/Decoding', () => {
     expect(decoded.to).toBe(mockSignedAuth.to)
     expect(decoded.nonce).toBe(mockSignedAuth.nonce)
     expect(decoded.signature).toBe(mockSignedAuth.signature)
-    expect(decoded.v).toBe(mockSignedAuth.v)
-    expect(decoded.r).toBe(mockSignedAuth.r)
-    expect(decoded.s).toBe(mockSignedAuth.s)
+
+    // Verify the encoded payload follows x402 v2 spec structure
+    const json = JSON.parse(Buffer.from(encoded, 'base64').toString('utf-8'))
+    expect(json.x402Version).toBe(2)
+    expect(json.payload.authorization).toBeDefined()
+    expect(json.payload.authorization.from).toBe(mockSignedAuth.from)
   })
 })
