@@ -42,6 +42,7 @@ This repository is optimized for learning. Code density is reduced by 40% compar
 - **[frontend/src/lib/eip3009.example.ts](./frontend/src/lib/eip3009.example.ts)**: Constructing and signing EIP-3009 meta-transactions using the session key's private key.
 - **[frontend/src/lib/x402Client.example.ts](./frontend/src/lib/x402Client.example.ts)**: A drop-in `fetch` wrapper that auto-intercepts `402`, handles background signing, and retries with payment headers.
 - **[frontend/src/lib/x402Server.example.ts](./frontend/src/lib/x402Server.example.ts)**: Full `withX402()` middleware — validates 402 responses, verifies EIP-3009 signatures via ecrecover, deduplicates nonces in-memory, and settles off-chain or on-chain.
+- **[frontend/src/lib/wagmi.ts](./frontend/src/lib/wagmi.ts)**: Arc Testnet chain configuration for wagmi/RainbowKit (chain ID, RPC, block explorer, USDC native currency).
 
 ### 4. Runnable Local Simulation (No Browser Required)
 - **[scripts/x402_full_demo.ts](./scripts/x402_full_demo.ts)**: A standalone Node.js script that simulates the entire user approval, 402 rejection, session key signing, and successful server settlement flow.
